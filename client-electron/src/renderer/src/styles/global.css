@@ -1,0 +1,58 @@
+/* 全局基础样式：reset + 字体 + 滚动条 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  font-size: 14px;
+  color: #1f2937;
+  background: #f1f5f9;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: #0ea5e9;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Element Plus 主色覆盖（默认 #409eff 偏蓝；这里统一用项目色 #0f172a） */
+:root {
+  --el-color-primary: #0f172a;
+  --el-color-primary-light-3: #334155;
+  --el-color-primary-light-5: #64748b;
+  --el-color-primary-light-7: #94a3b8;
+  --el-color-primary-light-9: #e2e8f0;
+  --el-color-primary-dark-2: #020617;
+}
+
+/* 自定义滚动条（更细更浅） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

@@ -1,0 +1,81 @@
+{
+  "id": "82g3f5zu65",
+  "name": "测试用例1",
+  "description": "",
+  "nodes": [
+    {
+      "id": "vk74R9s1",
+      "type": "start",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "label": "开始"
+      }
+    },
+    {
+      "id": "ltVsA2o_",
+      "type": "end",
+      "position": {
+        "x": 700,
+        "y": 200
+      },
+      "data": {
+        "label": "结束"
+      }
+    },
+    {
+      "id": "nHO2i3fjhYwfN6lIP5VYk",
+      "type": "openPage",
+      "position": {
+        "x": 279.3667921845817,
+        "y": 148.06822101101275
+      },
+      "data": {
+        "label": "打开页面233",
+        "url": "https://www.baidu.com/",
+        "waitForSelector": false,
+        "boolean2": false
+      }
+    },
+    {
+      "id": "45z1FRU2NNGt4WCwXx_dN",
+      "type": "clickElement",
+      "position": {
+        "x": 492.21860663636426,
+        "y": 147.77748078221038
+      },
+      "data": {
+        "label": "点击元素",
+        "waitAfter": 200,
+        "selector": "#chat-submit-button"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "sfL4UZ00DGAYRT1fM51WV",
+      "source": "vk74R9s1",
+      "target": "nHO2i3fjhYwfN6lIP5VYk",
+      "sourceHandle": "out",
+      "targetHandle": null
+    },
+    {
+      "id": "5s7ReWhTQKFNUu9qXYWOn",
+      "source": "nHO2i3fjhYwfN6lIP5VYk",
+      "target": "45z1FRU2NNGt4WCwXx_dN",
+      "sourceHandle": "out",
+      "targetHandle": null
+    },
+    {
+      "id": "3ln4xl4FxVqXzRSEXOz4n",
+      "source": "45z1FRU2NNGt4WCwXx_dN",
+      "target": "ltVsA2o_",
+      "sourceHandle": "out",
+      "targetHandle": null
+    }
+  ],
+  "createdAt": 1785036488639,
+  "updatedAt": 1786937838523
+}

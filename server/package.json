@@ -1,0 +1,19 @@
+{
+  "name": "e2e-orchestrator-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "dependencies": {
+    "@koa/cors": "^5.0.0",
+    "@koa/router": "^13.1.0",
+    "koa": "^2.15.3",
+    "koa-bodyparser": "^4.4.1",
+    "nanoid": "^6.0.0",
+    "puppeteer": "^23.6.0",
+    "ws": "^8.21.1"
+  }
+}

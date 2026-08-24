@@ -1,0 +1,32 @@
+version: '3.9'
+
+# 本地开发依赖：MySQL 8 + Redis 7
+# 启动：docker compose up -d
+# 数据落盘到 ./docker-data，可直接删除该目录重置环境
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: e2e-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpwd
+      MYSQL_DATABASE: e2e_orchestrator
+      MYSQL_USER: e2e
+      MYSQL_PASSWORD: e2e_pwd
+    ports:
+      - '3306:3306'
+    command:
+      - --default-authentication-plugin=caching_sha2_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./docker-data/mysql:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: e2e-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - ./docker-data/redis:/data

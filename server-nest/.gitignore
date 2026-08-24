@@ -1,0 +1,36 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# Prisma
+prisma/migrations/dev.db*
+# 但保留 .gitkeep 让 prisma/ 目录存在
+!prisma/.gitkeep
+
+# 翻译产物（运行时生成，可删）
+cases-output/
+*.spec.cjs
+*.live.spec.cjs
+.runner-*.cjs
+.live-runner-*.cjs
+
+# 运行时数据
+docker-data/
+
+# 本地环境
+.env
+.env.local
+.env.*.local
+
+# 日志
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
