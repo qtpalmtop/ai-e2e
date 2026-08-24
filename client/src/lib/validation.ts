@@ -1,6 +1,7 @@
 import type { CaseSchema, NodeType, ValidationError } from '@/types/schema';
 import { isRequired, isVisible, requiredMessage } from '@/lib/formRules';
 import { useFormSchemaStore } from '@/store/formSchemaStore';
+import { useSpaceStore } from '@/store/spaceStore';
 
 type Edge = CaseSchema['edges'][number];
 type Node = CaseSchema['nodes'][number];
@@ -154,7 +155,11 @@ export function validateConnectivity(schema: CaseSchema): ValidationError[] {
  */
 export function validateForms(schema: CaseSchema): ValidationError[] {
   const errors: ValidationError[] = [];
-  const schemas = useFormSchemaStore.getState().schemas;
+  // 从 store 拿当前空间对应的 schemas
+  const spaceId = useSpaceStore.getState().currentId;
+  const schemas = spaceId
+    ? useFormSchemaStore.getState().bySpace[spaceId] ?? {}
+    : {};
   schema.nodes.forEach((n) => {
     const def = schemas[n.type] ?? { atoms: [] };
     const data = (n.data ?? {}) as Record<string, unknown>;

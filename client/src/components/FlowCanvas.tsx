@@ -49,6 +49,8 @@ type Props = {
   initial: CaseSchema;
   onSave: (next: CaseSchema, errors: ValidationError[]) => Promise<void> | void;
   onRun?: () => void;
+  /** 只读模式：禁用拖拽/编辑/连线/删除（别人正在编辑时开启） */
+  readOnly?: boolean;
 };
 
 const btnStyle: React.CSSProperties = {
@@ -83,7 +85,15 @@ function graphToSchema(initial: CaseSchema): CaseSchema {
 }
 
 /** 顶部工具栏：只订阅 {errorCount, saving, saveHint, onAddNode}，不重渲染画布 */
-const Toolbar = memo(function Toolbar({ onRun, onSave }: { onRun?: () => void; onSave: () => void }) {
+const Toolbar = memo(function Toolbar({
+  onRun,
+  onSave,
+  readOnly,
+}: {
+  onRun?: () => void;
+  onSave: () => void;
+  readOnly?: boolean;
+}) {
   const { errorCount, saving, saveHint, onAddNode } = useCanvasToolbar();
   return (
     <>
@@ -107,7 +117,16 @@ const Toolbar = memo(function Toolbar({ onRun, onSave }: { onRun?: () => void; o
         <div style={{ fontSize: 12, color: '#64748b', marginRight: 8 }}>新增节点：</div>
         {(['openPage', 'inputText', 'clickElement', 'hoverElement', 'wait', 'condition', 'loop'] as NodeType[]).map(
           (t) => (
-            <button key={t} onClick={() => onAddNode(t)} style={btnStyle}>
+            <button
+              key={t}
+              onClick={() => onAddNode(t)}
+              disabled={readOnly}
+              style={{
+                ...btnStyle,
+                opacity: readOnly ? 0.5 : 1,
+                cursor: readOnly ? 'not-allowed' : 'pointer',
+              }}
+            >
               + {NODE_LABELS[t]}
             </button>
           ),
@@ -123,8 +142,16 @@ const Toolbar = memo(function Toolbar({ onRun, onSave }: { onRun?: () => void; o
         )}
         <button
           onClick={onSave}
-          disabled={saving}
-          style={{ ...btnStyle, background: '#111', color: '#fff', borderColor: '#111' }}
+          disabled={saving || readOnly}
+          title={readOnly ? '只读模式：无法保存' : undefined}
+          style={{
+            ...btnStyle,
+            background: '#111',
+            color: '#fff',
+            borderColor: '#111',
+            opacity: readOnly ? 0.5 : 1,
+            cursor: readOnly ? 'not-allowed' : 'pointer',
+          }}
         >
           {saving ? '保存中...' : '保存'}
         </button>
@@ -153,7 +180,7 @@ const Toolbar = memo(function Toolbar({ onRun, onSave }: { onRun?: () => void; o
 });
 
 /** 画布本体：只订阅 nodes/edges/handlers，节点拖拽不触发工具栏重渲染 */
-const Graph = memo(function Graph() {
+const Graph = memo(function Graph({ readOnly = false }: { readOnly?: boolean }) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } = useCanvasGraph();
   const setSelectedId = useCanvasStore((s) => s.setSelectedId);
   const rfRef = useRef<ReactFlowInstance | null>(null);
@@ -163,9 +190,14 @@ const Graph = memo(function Graph() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
+      // 只读模式下：禁用节点/边的变更与连线
+      onNodesChange={readOnly ? undefined : onNodesChange}
+      onEdgesChange={readOnly ? undefined : onEdgesChange}
+      onConnect={readOnly ? undefined : onConnect}
+      nodesDraggable={!readOnly}
+      nodesConnectable={!readOnly}
+      edgesFocusable={!readOnly}
+      elementsSelectable
       onNodeClick={(_, n) => setSelectedId(n.id)}
       onPaneClick={() => setSelectedId(null)}
       onInit={(inst) => (rfRef.current = inst)}
@@ -180,7 +212,7 @@ const Graph = memo(function Graph() {
   );
 });
 
-function FlowCanvasInner({ initial, onSave, onRun }: Props) {
+function FlowCanvasInner({ initial, onSave, onRun, readOnly }: Props) {
   const loadSchema = useCanvasStore((s) => s.loadSchema);
   const setErrors = useCanvasStore((s) => s.setErrors);
   const setSaving = useCanvasStore((s) => s.setSaving);
@@ -240,9 +272,9 @@ function FlowCanvasInner({ initial, onSave, onRun }: Props) {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <Toolbar onRun={onRun} onSave={handleSave} />
-      <Graph />
-      <NodeFormPanel />
+      <Toolbar onRun={onRun} onSave={handleSave} readOnly={readOnly} />
+      <Graph readOnly={readOnly} />
+      <NodeFormPanel readOnly={readOnly} />
     </div>
   );
 }

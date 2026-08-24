@@ -1,0 +1,12 @@
+node_modules
+out
+dist
+release
+.DS_Store
+*.log
+.vscode
+.idea
+*.tsbuildinfo
+src/renderer/src/auto-imports.d.ts
+src/renderer/src/components.d.ts
+.env.local

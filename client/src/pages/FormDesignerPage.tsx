@@ -14,6 +14,7 @@ import type { NodeType } from '@/types/schema';
 import { NODE_LABELS } from '@/config/nodeSchemas';
 import { AtomInput } from '@/components/formDesigner/AtomInput';
 import { RuleEditorPanel } from '@/components/formDesigner/RuleEditor';
+import { isVisible, isRequired, isDisabled, requiredMessage } from '@/lib/formRules';
 
 // 节点类型列表（按业务顺序）
 const NODE_TYPES: NodeType[] = [
@@ -89,14 +90,18 @@ const AtomPalette = memo(function AtomPalette({
 });
 
 // ---------- 中：画布 ----------
+// 所见即所得：每个原子作为表单字段卡片渲染（AtomInput 嵌入）
 // 两种 drop 来源：
 //   1. 调色板拖入（application/x-atom-type）→ onInsert 新建原子
 //   2. 已有原子拖动（application/x-atom-reorder）→ onReorder 排序
 // 插入位置判定：拖到 item 的上半部分 → 插到该 item 之前；下半部分 → 插到该 item 之后
 // 占位线（蓝色 4px）渲染在 item 上方或下方；空状态时整个画布就是 drop zone
+// 联动规则（visible/required/disabled/error）实时由 formRules 求值
 const FormCanvas = memo(function FormCanvas({
   schema,
   selectedId,
+  data,
+  onDataChange,
   onSelect,
   onReorder,
   onDelete,
@@ -104,21 +109,33 @@ const FormCanvas = memo(function FormCanvas({
 }: {
   schema: FormSchema;
   selectedId: string | null;
+  data: Record<string, unknown>;
+  onDataChange: (name: string, value: unknown) => void;
   onSelect: (id: string) => void;
   onReorder: (fromId: string, toIndex: number) => void;
   onDelete: (id: string) => void;
   onAdd: (type: AtomType, index: number) => void;
 }) {
-  // 当前插入提示：{ id, pos }，null 表示无
   const [dropHint, setDropHint] = useState<{ id: string; pos: 'before' | 'after' } | null>(null);
-  // 正在被拖动的原子 id（用于源 item 视觉变淡）
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // 按 visible 过滤后的原子
+  const visibleAtoms = useMemo(
+    () => schema.atoms.filter((a) => isVisible(a, data)),
+    [schema.atoms, data],
+  );
 
   return (
     <div
-      style={{ padding: 12, overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#f8fafc',
+        overflow: 'hidden',
+      }}
       onDragOver={(e) => {
-        // 允许 drop（preventDefault），但具体位置由子级 CanvasItem 决定
         if (
           e.dataTransfer.types.includes('application/x-atom-type') ||
           e.dataTransfer.types.includes('application/x-atom-reorder')
@@ -129,66 +146,105 @@ const FormCanvas = memo(function FormCanvas({
         }
       }}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
-        表单画布
-      </div>
-      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-        拖入新原子，或拖动已有原子调整顺序；点击选中以编辑
+      <div
+        style={{
+          padding: '12px 16px 8px',
+          background: '#fff',
+          borderBottom: '1px solid #e2e8f0',
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>表单预览</div>
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+          所见即所得 — 拖入新原子或拖动排序，点击字段以编辑
+        </div>
       </div>
 
-      {schema.atoms.length === 0 ? (
-        <EmptyDropZone
-          onActivate={() => setDropHint({ id: '__empty__', pos: 'after' })}
-          onDeactivate={() =>
-            setDropHint((c) => (c?.id === '__empty__' ? null : c))
-          }
-          onDrop={(type) => {
-            setDropHint(null);
-            onAdd(type, 0);
-          }}
-        />
-      ) : (
-        <div>
-          {schema.atoms.map((atom, i) => (
-            <CanvasItem
-              key={atom.id}
-              atom={atom}
-              index={i}
-              selected={selectedId === atom.id}
-              isDragging={draggingId === atom.id}
-              hint={dropHint?.id === atom.id ? dropHint.pos : null}
-              onHintChange={(pos) => {
-                if (pos === null) {
-                  setDropHint((c) => (c?.id === atom.id ? null : c));
-                } else {
-                  setDropHint({ id: atom.id, pos });
-                }
-              }}
-              onInsert={(type, pos) => {
-                setDropHint(null);
-                const insertIndex = pos === 'before' ? i : i + 1;
-                onAdd(type, insertIndex);
-              }}
-              onMove={(fromId, pos) => {
-                setDropHint(null);
-                if (fromId === atom.id) return; // 拖到自己 = noop
-                const insertIndex = pos === 'before' ? i : i + 1;
-                onReorder(fromId, insertIndex);
-              }}
-              onSelect={() => onSelect(atom.id)}
-              onDelete={() => onDelete(atom.id)}
-              onDragStart={(id) => {
-                setDraggingId(id);
-                setDropHint(null);
-              }}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDropHint(null);
-              }}
-            />
-          ))}
-        </div>
-      )}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          padding: '20px 16px 60px',
+          boxSizing: 'border-box',
+          maxWidth: 760,
+          margin: '0 auto',
+          width: '100%',
+        }}
+      >
+        {schema.atoms.length === 0 ? (
+          <EmptyDropZone
+            onActivate={() => setDropHint({ id: '__empty__', pos: 'after' })}
+            onDeactivate={() =>
+              setDropHint((c) => (c?.id === '__empty__' ? null : c))
+            }
+            onDrop={(type) => {
+              setDropHint(null);
+              onAdd(type, 0);
+            }}
+          />
+        ) : (
+          <div>
+            {visibleAtoms.map((atom) => {
+              const i = schema.atoms.findIndex((a) => a.id === atom.id);
+              return (
+                <CanvasItem
+                  key={atom.id}
+                  atom={atom}
+                  index={i}
+                  selected={selectedId === atom.id}
+                  isDragging={draggingId === atom.id}
+                  hint={dropHint?.id === atom.id ? dropHint.pos : null}
+                  data={data}
+                  onDataChange={onDataChange}
+                  onHintChange={(pos) => {
+                    if (pos === null) {
+                      setDropHint((c) => (c?.id === atom.id ? null : c));
+                    } else {
+                      setDropHint({ id: atom.id, pos });
+                    }
+                  }}
+                  onInsert={(type, pos) => {
+                    setDropHint(null);
+                    const insertIndex = pos === 'before' ? i : i + 1;
+                    onAdd(type, insertIndex);
+                  }}
+                  onMove={(fromId, pos) => {
+                    setDropHint(null);
+                    if (fromId === atom.id) return;
+                    const insertIndex = pos === 'before' ? i : i + 1;
+                    onReorder(fromId, insertIndex);
+                  }}
+                  onSelect={() => onSelect(atom.id)}
+                  onDelete={() => onDelete(atom.id)}
+                  onDragStart={(id) => {
+                    setDraggingId(id);
+                    setDropHint(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingId(null);
+                    setDropHint(null);
+                  }}
+                />
+              );
+            })}
+            {visibleAtoms.length === 0 && (
+              <div
+                style={{
+                  textAlign: 'center',
+                  fontSize: 12,
+                  color: '#94a3b8',
+                  padding: '24px 8px',
+                  background: '#fff',
+                  border: '1px dashed #e2e8f0',
+                  borderRadius: 8,
+                }}
+              >
+                所有字段都被联动规则隐藏了，尝试修改其他字段看效果
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 });
@@ -278,12 +334,16 @@ function EmptyDropZone({
   );
 }
 
+// 画布单项 — 所见即所得
+// 卡片内嵌 AtomInput；拖拽手柄在左、删除按钮在右上（仅 selected 时显示）
 function CanvasItem({
   atom,
   index: _index,
   selected,
   isDragging,
   hint,
+  data,
+  onDataChange,
   onHintChange,
   onInsert,
   onMove,
@@ -297,6 +357,8 @@ function CanvasItem({
   selected: boolean;
   isDragging: boolean;
   hint: 'before' | 'after' | null;
+  data: Record<string, unknown>;
+  onDataChange: (name: string, value: unknown) => void;
   onHintChange: (pos: 'before' | 'after' | null) => void;
   onInsert: (type: AtomType, pos: 'before' | 'after') => void;
   onMove: (fromId: string, pos: 'before' | 'after') => void;
@@ -308,19 +370,22 @@ function CanvasItem({
   const counterRef = useRef(0);
   const ref = useRef<HTMLDivElement>(null);
 
-  // 两种 drag 类型：
-  //   application/x-atom-type     ← 调色板原子（drop = 新建）
-  //   application/x-atom-reorder  ← 已有原子  （drop = 排序）
   const isAtomDrag = (e: React.DragEvent) =>
     e.dataTransfer.types.includes('application/x-atom-type') ||
     e.dataTransfer.types.includes('application/x-atom-reorder');
 
-  // 根据鼠标 Y 坐标判定插入位置：上半部分 → before，下半部分 → after
   const calcPos = (clientY: number): 'before' | 'after' => {
     if (!ref.current) return 'after';
     const rect = ref.current.getBoundingClientRect();
     return clientY < rect.top + rect.height / 2 ? 'before' : 'after';
   };
+
+  // 联动规则实时计算
+  const required = isRequired(atom, data);
+  const disabled = isDisabled(atom, data);
+  const error = requiredMessage(atom, data) ?? undefined;
+  const hasError = Boolean(error);
+  const value = data[atom.name] ?? atom.defaultValue;
 
   return (
     <>
@@ -329,7 +394,6 @@ function CanvasItem({
         ref={ref}
         draggable
         onClick={onSelect}
-        // ----- 自身作为 drag source（用于排序）-----
         onDragStart={(e) => {
           e.dataTransfer.setData('application/x-atom-reorder', atom.id);
           e.dataTransfer.effectAllowed = 'move';
@@ -338,10 +402,8 @@ function CanvasItem({
         onDragEnd={() => {
           onDragEnd();
         }}
-        // ----- 自身作为 drop target（接受新原子或排序）-----
         onDragEnter={(e) => {
           if (!isAtomDrag(e)) return;
-          // 拖到自己时不要显示 hint（视觉上不会触发，因为 drag 镜像不与源交互）
           if (e.dataTransfer.types.includes('application/x-atom-reorder')) {
             const fromId = e.dataTransfer.getData('application/x-atom-reorder');
             if (fromId === atom.id) return;
@@ -363,7 +425,6 @@ function CanvasItem({
           )
             ? 'move'
             : 'copy';
-          // 鼠标在 item 内部移动时，实时重算上下半部分位置
           const pos = calcPos(e.clientY);
           if (pos !== hint) onHintChange(pos);
         }}
@@ -378,55 +439,92 @@ function CanvasItem({
         onDrop={(e) => {
           counterRef.current = 0;
           const pos = calcPos(e.clientY);
-          // 优先识别 reorder（已有原子排序）
           const reorderId = e.dataTransfer.getData('application/x-atom-reorder');
           if (reorderId) {
             if (reorderId !== atom.id) onMove(reorderId, pos);
             return;
           }
-          // 否则识别 palette（新建原子）
           const newType = e.dataTransfer.getData('application/x-atom-type') as AtomType;
           if (newType) onInsert(newType, pos);
         }}
         style={{
-          background: selected ? '#eff6ff' : '#fff',
+          position: 'relative',
+          background: selected ? '#f8fafc' : '#fff',
           border: `1px ${isDragging ? 'dashed' : 'solid'} ${
-            selected ? '#3b82f6' : '#e2e8f0'
+            hasError ? '#fca5a5' : selected ? '#3b82f6' : '#e2e8f0'
           }`,
-          borderRadius: 6,
-          padding: 10,
-          marginBottom: 4,
-          cursor: isDragging ? 'grabbing' : 'grab',
+          borderRadius: 8,
+          padding: '10px 12px 10px 8px',
+          marginBottom: 8,
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 8,
           opacity: isDragging ? 0.4 : 1,
-          transition: 'opacity 0.1s',
+          transition: 'border-color 0.12s, background 0.12s, box-shadow 0.12s, opacity 0.1s',
+          boxShadow: selected
+            ? hasError
+              ? '0 0 0 2px rgba(239, 68, 68, 0.15)'
+              : '0 0 0 2px rgba(59, 130, 246, 0.12)'
+            : undefined,
+          backgroundColor: hasError && !selected ? '#fef2f2' : undefined,
         }}
       >
         <span
           aria-hidden
+          title="拖动排序"
           style={{
             color: '#cbd5e1',
-            fontSize: 12,
+            fontSize: 14,
             userSelect: 'none',
-            lineHeight: 1,
+            lineHeight: 1.2,
             letterSpacing: -1,
+            flexShrink: 0,
+            padding: '2px 2px 0 0',
+            cursor: isDragging ? 'grabbing' : 'grab',
           }}
         >
           ⋮⋮
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: '#0f172a' }}>
-            {atom.label}
-            {atom.required && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
-          </div>
-          <div style={{ fontSize: 10, color: '#94a3b8' }}>
-            [{atom.type}] {atom.name}
-            {atom.rules.length > 0 && ` · ${atom.rules.length} 条规则`}
-          </div>
+          <AtomInput
+            atom={atom}
+            value={value}
+            onChange={(v) => onDataChange(atom.name, v)}
+            disabled={disabled}
+            required={required}
+            error={error}
+          />
         </div>
-        <Btn onClick={onDelete} title="删除" danger>×</Btn>
+        {selected && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="删除字段"
+            style={{
+              position: 'absolute',
+              top: 6,
+              right: 6,
+              width: 20,
+              height: 20,
+              padding: 0,
+              border: 'none',
+              borderRadius: '50%',
+              background: '#ef4444',
+              color: '#fff',
+              cursor: 'pointer',
+              fontSize: 14,
+              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
       {hint === 'after' && <DropLine position="after" />}
     </>
@@ -642,29 +740,6 @@ function OptionEditor({
   );
 }
 
-// ---------- 预览 ----------
-function LivePreview({ schema }: { schema: FormSchema }) {
-  const [data, setData] = useState<Record<string, unknown>>({});
-  return (
-    <div style={{ padding: 12, borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>实时预览</div>
-      <div style={{ background: '#fff', borderRadius: 6, padding: 8, maxHeight: 220, overflowY: 'auto' }}>
-        {schema.atoms.length === 0 && (
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>画布为空</div>
-        )}
-        {schema.atoms.map((atom) => (
-          <AtomInput
-            key={atom.id}
-            atom={atom}
-            value={data[atom.name] ?? atom.defaultValue}
-            onChange={(v) => setData((d) => ({ ...d, [atom.name]: v }))}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ---------- 主页面 ----------
 export function FormDesignerPage() {
   const navigate = useNavigate();
@@ -679,6 +754,8 @@ export function FormDesignerPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  // 表单实时输入数据：用于画布中联动规则（visible/required/disabled/error）求值
+  const [data, setData] = useState<Record<string, unknown>>({});
 
   const serverSchema = useFormSchema(nodeType);
 
@@ -686,11 +763,12 @@ export function FormDesignerPage() {
     if (!fetched) fetchAll();
   }, [fetched, fetchAll]);
 
-  // 切节点类型：重置 draft
+  // 切节点类型：重置 draft 和 data
   useEffect(() => {
     setDraft({ atoms: serverSchema.atoms.map((a) => ({ ...a })) });
     setSelectedId(null);
     setDirty(false);
+    setData({});
   }, [serverSchema, nodeType]);
 
   const updateDraft = useCallback((next: FormSchema) => {
@@ -747,6 +825,10 @@ export function FormDesignerPage() {
     setDraft((d) => ({ atoms: d.atoms.filter((a) => a.id !== id) }));
     setSelectedId((cur) => (cur === id ? null : cur));
     setDirty(true);
+  }, []);
+
+  const onDataChange = useCallback((name: string, value: unknown) => {
+    setData((d) => ({ ...d, [name]: value }));
   }, []);
 
   const handleSave = async () => {
@@ -859,12 +941,13 @@ export function FormDesignerPage() {
           <FormCanvas
             schema={draft}
             selectedId={selectedId}
+            data={data}
+            onDataChange={onDataChange}
             onSelect={setSelectedId}
             onReorder={reorder}
             onDelete={removeAtom}
             onAdd={addAtom}
           />
-          <LivePreview schema={draft} />
         </div>
         <div style={{ width: 320, background: '#f8fafc', borderLeft: '1px solid #e2e8f0' }}>
           {selectedAtom ? (

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { openLiveSocket } from '@/api';
 
 export type LiveEvent =
   | { type: 'hello'; caseId: string }
@@ -44,41 +45,8 @@ export function LivePreview({
   const wsRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
-  // 建立 WS：组件挂载就连，卸载自动断
-  useEffect(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${window.location.host}/api/cases/${caseId}/live`;
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
-
-    ws.onmessage = (e) => {
-      let ev: LiveEvent;
-      try {
-        ev = JSON.parse(e.data);
-      } catch {
-        return;
-      }
-      handleEvent(ev);
-    };
-    ws.onerror = () => {
-      setError('WebSocket 连接失败');
-    };
-    ws.onclose = () => {
-      wsRef.current = null;
-    };
-
-    return () => {
-      try { ws.close(); } catch { /* ignore */ }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseId]);
-
-  // 日志自动滚到底
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
-
-  function handleEvent(ev: LiveEvent) {
+  // 事件处理用 useCallback 稳定引用，依赖里只放 setState（setState 本身稳定）
+  const handleEvent = useCallback((ev: LiveEvent) => {
     switch (ev.type) {
       case 'hello':
         // 连上即可，不做特殊处理
@@ -138,7 +106,41 @@ export function LivePreview({
         setLogs((prev) => [...prev, `✗ error: ${ev.message}`]);
         break;
     }
-  }
+  }, []);
+
+  // 建立 WS：组件挂载就连，卸载自动断
+  useEffect(() => {
+    let alive = true;
+    let ws: WebSocket | null = null;
+    openLiveSocket(
+      caseId,
+      handleEvent,
+      () => alive && setError('WebSocket 连接失败'),
+    )
+      .then((w) => {
+        if (!alive) {
+          try { w.close(); } catch { /* ignore */ }
+          return;
+        }
+        ws = w;
+        wsRef.current = w;
+        w.onclose = () => {
+          if (wsRef.current === w) wsRef.current = null;
+        };
+      })
+      .catch(() => {
+        if (alive) setError('WebSocket 连接失败');
+      });
+    return () => {
+      alive = false;
+      try { ws?.close(); } catch { /* ignore */ }
+    };
+  }, [caseId, handleEvent]);
+
+  // 日志自动滚到底
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
 
   const handleStart = async () => {
     if (status === 'running') return;

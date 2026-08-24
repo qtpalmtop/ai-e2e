@@ -15,8 +15,13 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
-        // 显式开启 WS 转发：默认在某些 Vite/http-proxy 版本里是 false
+      },
+      // WS 网关（live 预览事件流）：
+      // target 显式用 ws://，避免 http-proxy 误用 http 协议去握 upgrade
+      '/ws': {
+        target: 'ws://localhost:4000',
         ws: true,
+        changeOrigin: true,
       },
     },
   },

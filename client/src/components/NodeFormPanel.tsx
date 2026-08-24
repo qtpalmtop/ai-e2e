@@ -5,7 +5,7 @@ import { useFormSchemaStore, useFormSchema } from '@/store/formSchemaStore';
 import { isVisible, isRequired, isDisabled, requiredMessage } from '@/lib/formRules';
 import { AtomInput } from '@/components/formDesigner/AtomInput';
 
-export const NodeFormPanel = memo(function NodeFormPanel() {
+export const NodeFormPanel = memo(function NodeFormPanel({ readOnly }: { readOnly?: boolean } = {}) {
   const ref = useRef<HTMLDivElement>(null);
   const selectedId = useCanvasStore((s) => s.selectedId);
   const selected = useSelectedNode();
@@ -56,6 +56,7 @@ export const NodeFormPanel = memo(function NodeFormPanel() {
   if (!selectedId || !selected || !nodeType) return null;
 
   const commit = (next: Record<string, unknown>) => {
+    if (readOnly) return;
     setDraft(next);
     updateNodeData(selected.id, next);
   };
@@ -118,6 +119,7 @@ export const NodeFormPanel = memo(function NodeFormPanel() {
           节点名称<span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
         </label>
         <input
+          disabled={!!readOnly}
           style={{
             width: '100%',
             padding: '6px 8px',
@@ -126,6 +128,9 @@ export const NodeFormPanel = memo(function NodeFormPanel() {
             fontSize: 13,
             outline: 'none',
             boxSizing: 'border-box',
+            background: readOnly ? '#f1f5f9' : '#fff',
+            color: readOnly ? '#94a3b8' : '#0f172a',
+            cursor: readOnly ? 'not-allowed' : 'text',
           }}
           value={(draft.label as string) ?? ''}
           onChange={(e) => updateField('label', e.target.value)}
@@ -148,7 +153,7 @@ export const NodeFormPanel = memo(function NodeFormPanel() {
             atom={atom}
             value={draft[atom.name]}
             onChange={(v) => updateField(atom.name, v)}
-            disabled={isDisabled(atom, draft)}
+            disabled={isDisabled(atom, draft) || !!readOnly}
             required={isRequired(atom, draft)}
             error={err}
           />
@@ -156,7 +161,9 @@ export const NodeFormPanel = memo(function NodeFormPanel() {
       })}
 
       <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>
-        修改实时保存到画布；点击面板外关闭
+        {readOnly
+          ? '只读模式：当前用例正在被其他用户编辑，修改不会保存'
+          : '修改实时保存到画布；点击面板外关闭'}
       </div>
     </aside>
   );

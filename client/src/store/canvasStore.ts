@@ -20,6 +20,7 @@ import { nanoid } from 'nanoid';
 import type { CaseSchema, NodeType, ValidationError } from '@/types/schema';
 import { NODE_LABELS } from '@/config/nodeSchemas';
 import { useFormSchemaStore } from '@/store/formSchemaStore';
+import { useSpaceStore } from '@/store/spaceStore';
 
 type CanvasState = {
   // ---------- 数据 ----------
@@ -91,9 +92,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   addNode: (type) => {
     const id = nanoid();
     // 默认值从动态表单 schema 取，没有就用空对象（用户点击节点时再设置）
-    const formSchema = useFormSchemaStore.getState().schemas[type] ?? { atoms: [] };
+    // 用 getLocalFor 显式带 spaceId，避免在非 React 上下文拿不到 hook
+    const spaceId = useSpaceStore.getState().currentId;
+    const formSchema: { atoms: Array<{ name: string; defaultValue?: unknown }> } =
+      spaceId
+        ? (useFormSchemaStore.getState().getLocalFor(spaceId, type) as any)
+        : { atoms: [] };
     const data: Record<string, unknown> = { label: NODE_LABELS[type] };
-    formSchema.atoms.forEach((a) => {
+    formSchema.atoms.forEach((a: { name: string; defaultValue?: unknown }) => {
       if (a.defaultValue !== undefined) data[a.name] = a.defaultValue;
     });
     const position = {
