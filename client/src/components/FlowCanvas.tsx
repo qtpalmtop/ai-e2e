@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,7 +9,6 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useShallow } from 'zustand/react/shallow';
 import {
   StartNode,
   EndNode,
@@ -22,13 +21,14 @@ import {
   LoopNode,
 } from '@/components/nodes';
 import { NodeFormPanel } from '@/components/NodeFormPanel';
-import { NODE_LABELS } from '@/config/nodeSchemas';
+import { NODE_COLORS, NODE_LABELS } from '@/config/nodeSchemas';
 import type { CaseSchema, NodeType, ValidationError } from '@/types/schema';
 import { validateAll } from '@/lib/validation';
 import {
   useCanvasStore,
   useCanvasGraph,
   useCanvasToolbar,
+  useNodeCount,
   getCanvasGraph,
 } from '@/store/canvasStore';
 
@@ -183,6 +183,7 @@ const Toolbar = memo(function Toolbar({
 const Graph = memo(function Graph({ readOnly = false }: { readOnly?: boolean }) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } = useCanvasGraph();
   const setSelectedId = useCanvasStore((s) => s.setSelectedId);
+  const nodeCount = useNodeCount();
   const rfRef = useRef<ReactFlowInstance | null>(null);
 
   return (
@@ -203,11 +204,29 @@ const Graph = memo(function Graph({ readOnly = false }: { readOnly?: boolean }) 
       onInit={(inst) => (rfRef.current = inst)}
       fitView
       proOptions={{ hideAttribution: true }}
-      defaultEdgeOptions={{ animated: true, style: { stroke: '#94a3b8' } }}
+      // 性能优化：视口裁剪 — 只渲染可见区域内的节点/边，上千节点也不卡
+      onlyRenderVisibleElements
+      // 性能优化：选中节点不提升 z-index，避免整个节点层重绘
+      elevateNodesOnSelect={false}
+      // 性能优化：拖拽节点时不自动平移画布（大量节点时 autoPan 开销大）
+      autoPanOnNodeDrag={false}
+      autoPanOnConnect={false}
+      // 性能优化：禁用双击缩放，减少误触
+      zoomOnDoubleClick={false}
+      // 性能优化：边不做 CSS 动画（animated 在大量边时极耗 GPU）
+      defaultEdgeOptions={{ style: { stroke: '#94a3b8' } }}
     >
       <Background gap={16} />
       <Controls />
-      <MiniMap pannable zoomable />
+      {/* MiniMap 在节点数 ≤500 时才渲染，避免大量节点 SVG 绘制开销 */}
+      {nodeCount <= 500 && (
+        <MiniMap
+          pannable
+          zoomable
+          nodeColor={(n) => NODE_COLORS[n.type as NodeType] ?? '#94a3b8'}
+          nodeStrokeWidth={3}
+        />
+      )}
     </ReactFlow>
   );
 });
@@ -223,31 +242,34 @@ function FlowCanvasInner({ initial, onSave, onRun, readOnly }: Props) {
     loadSchema(initial);
   }, [initial.id, loadSchema, initial]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 实时校验：nodes/edges 变化触发
-  const { nodes, edges } = useCanvasStore(
-    useShallow((s) => ({ nodes: s.nodes, edges: s.edges })),
-  );
-  const errors = useMemo(() => {
-    const schema: CaseSchema = {
-      ...initial,
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.type as NodeType,
-        position: n.position,
-        data: n.data as Record<string, unknown>,
-      })),
-      edges: edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        sourceHandle: e.sourceHandle ?? null,
-        targetHandle: e.targetHandle ?? null,
-        data: e.data as Record<string, unknown> | undefined,
-      })),
-    };
-    return validateAll(schema);
-  }, [nodes, edges, initial]);
-  useEffect(() => setErrors(errors), [errors, setErrors]);
+  // 防抖校验：nodes/edges 变化后延迟 300ms 再跑 validateAll
+  // 拖拽节点时每帧都会触发 nodes 引用变化，但不做全量校验，只在操作停止后校验
+  const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const schema: CaseSchema = {
+        ...initial,
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          type: n.type as NodeType,
+          position: n.position,
+          data: n.data as Record<string, unknown>,
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: e.sourceHandle ?? null,
+          targetHandle: e.targetHandle ?? null,
+          data: e.data as Record<string, unknown> | undefined,
+        })),
+      };
+      setErrors(validateAll(schema));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [nodes, edges, initial, setErrors]);
 
   const handleSave = useCallback(async () => {
     const schema = graphToSchema(initial);

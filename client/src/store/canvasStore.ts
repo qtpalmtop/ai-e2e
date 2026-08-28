@@ -149,28 +149,35 @@ export function useCanvasToolbar() {
   );
 }
 
-/** 当前选中节点信息（空 → null）。shallow 保证只有 data 真的变了才刷新面板 */
+/** 当前选中节点信息（空 → null）。useShallow 保证只有 data 真的变了才刷新面板 */
 export function useSelectedNode(): {
   id: string;
   type: string;
   data: Record<string, unknown>;
 } | null {
-  return useCanvasStore((s) => {
-    if (!s.selectedId) return null;
-    const n = s.nodes.find((x) => x.id === s.selectedId);
-    if (!n) return null;
-    return { id: n.id, type: n.type ?? '', data: n.data as Record<string, unknown> };
-  });
+  return useCanvasStore(
+    useShallow((s) => {
+      if (!s.selectedId) return null;
+      const n = s.nodes.find((x) => x.id === s.selectedId);
+      if (!n) return null;
+      return { id: n.id, type: n.type ?? '', data: n.data as Record<string, unknown> };
+    }),
+  );
 }
 
 /** 该节点关联错误（O(n) 过滤，但因为 errors 一般很小，无压力） */
 export function useNodeErrors(nodeId: string | null): ValidationError[] {
-  return useCanvasStore((s) =>
-    nodeId ? s.errors.filter((e) => e.nodeId === nodeId) : [],
+  return useCanvasStore(
+    useShallow((s) =>
+      nodeId ? s.errors.filter((e) => e.nodeId === nodeId) : [],
+    ),
   );
 }
 
-/** 校验所需的 nodes+edges 原子读取（仅在 save/validate 主动调用） */
+/** 节点数量（用于条件渲染 MiniMap 等 UI 开关） */
+export function useNodeCount(): number {
+  return useCanvasStore((s) => s.nodes.length);
+}
 export const getCanvasGraph = () => {
   const s = useCanvasStore.getState();
   return { nodes: s.nodes, edges: s.edges };
